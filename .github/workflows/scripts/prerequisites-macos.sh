@@ -6,6 +6,7 @@ brew install \
   glib \
   libgcrypt \
   libslirp \
+  meson \
   ninja \
   pixman \
   pkg-config \

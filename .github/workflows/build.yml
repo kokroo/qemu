@@ -1,6 +1,11 @@
 name: 'build'
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ esp-develop-semihosting ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
 
 jobs:
 
@@ -56,7 +61,7 @@ jobs:
           - x86_64-w64-mingw32
           - x86_64-apple-darwin
           - aarch64-apple-darwin
-        target: [xtensa-softmmu, riscv32-softmmu]
+        target: [xtensa-softmmu]
 
         include:
           - platform: x86_64-linux-gnu
@@ -81,13 +86,13 @@ jobs:
             run_configure: "./.github/workflows/scripts/configure-win.sh"
 
           - platform: x86_64-apple-darwin
-            runs_on: macos-14
+            runs_on: macos-13
             shell: bash -e {0}
             run_prerequisites: "./.github/workflows/scripts/prerequisites-macos.sh"
             run_configure: "./.github/workflows/scripts/configure-macos.sh"
 
           - platform: aarch64-apple-darwin
-            runs_on: macos-14-xlarge
+            runs_on: macos-14
             shell: bash -e {0}
             run_prerequisites: "./.github/workflows/scripts/prerequisites-macos.sh"
             run_configure: "./.github/workflows/scripts/configure-macos.sh"
@@ -100,7 +105,7 @@ jobs:
         shell: ${{ matrix.shell }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Install prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
         if : ${{ matrix.platform != 'x86_64-w64-mingw32' }}
@@ -121,6 +126,7 @@ jobs:
             mingw-w64-x86_64-libgcrypt
             mingw-w64-x86_64-libiconv
             mingw-w64-x86_64-libslirp
+            mingw-w64-x86_64-meson
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-pixman
             mingw-w64-x86_64-pkg-config
@@ -155,32 +161,32 @@ jobs:
           mkdir -p ${DIST_DIR}
           cd $PWD/install
           ARCHIVE_NAME=${PROJECT_NAME}-${TARGET}-${VERSION}-${PLATFORM}.tar.xz
-          tar -cJvf ${DIST_DIR}/${ARCHIVE_NAME} qemu > ${DIST_DIR}/dist-filelist-${TARGET}-${PLATFORM}.txt 2>&1
+          XZ_OPT="-T0" tar -cJvf ${DIST_DIR}/${ARCHIVE_NAME} qemu > ${DIST_DIR}/dist-filelist-${TARGET}-${PLATFORM}.txt 2>&1
           echo "dist/dist-${PROJECT_NAME}-${TARGET}-${PLATFORM}/${ARCHIVE_NAME}" > ${DIST_DIR}/file_${PLATFORM}_${TARGET}
 
       - name: Save build/build.ninja for failed builds
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: build-ninja-${{ matrix.target }}-${{ matrix.platform }}
           path: build/build.ninja
 
       - name: Dist filelist (dbg) (${{ matrix.target }} @ ${{ matrix.platform }})
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: dist-filelist-${{ matrix.target }}-${{ matrix.platform }}
           path: |
             dist/dist-filelist-*
 
       - name: Dist artifacts (${{ matrix.target }} @ ${{ matrix.platform }})
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: dist-qemu-${{ matrix.target }}-${{ matrix.platform }}
           path: |
             dist/
 
   Upload:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     needs: [ Vars, Build ]
     runs-on: ubuntu-latest
     permissions:
@@ -203,49 +209,46 @@ jobs:
           git clone --quiet --depth 1 --recurse-submodules --shallow-submodules "${REPOSITORY_URL}" "${RELEASE_SRC_NAME}"
           find "${RELEASE_SRC_NAME}" -name ".git" -type d -exec rm -rf -- "{}" +
           find "${RELEASE_SRC_NAME}" -name .git\* -exec rm -rf -- {} +
-          tar -cJvf "${RELEASE_SRC_FILE}" "${RELEASE_SRC_NAME}" > src-filelist.txt 2>&1
+          XZ_OPT="-T0" tar -cJvf "${RELEASE_SRC_FILE}" "${RELEASE_SRC_NAME}" > src-filelist.txt 2>&1
           rm -rf -- "${RELEASE_SRC_NAME}"
           ls -l
 
       - name: Source filelist (dbg)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: src-filelist
           path: |
             src-filelist.txt
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
           pattern: dist-qemu-*
           path: dist
+          merge-multiple: true
 
       - name: Create a checksum file
         env:
           RELEASE_CHECKSUM_FILE: ${{ steps.create-source.outputs.RELEASE_CHECKSUM_FILE }}
           RELEASE_SRC_FILE: ${{ steps.create-source.outputs.RELEASE_SRC_FILE }}
         run: |
-          ls -l
-          DIST_FILE_LIST=$(find . -name file_\* -exec cat {} \+)
-          DIST_FILE_LIST="${DIST_FILE_LIST} ${RELEASE_SRC_FILE}"
           RELEASE_CHECKSUM_FILE=$(realpath "${RELEASE_CHECKSUM_FILE}")
-          for n in $DIST_FILE_LIST; do
-            # Release archives might be in subdirectories, but we need just the file names in the checksum file
-            n_dir=$(dirname "${n}")
-            n_file=$(basename "${n}")
-            pushd "${n_dir}" > /dev/null
-            sz=$(stat -c%s "${n_file}")
-            printf "# %s: %s bytes\n" "${n_file}" "${sz}" >> "${RELEASE_CHECKSUM_FILE}"
-            sha256sum -b "${n_file}" >> "${RELEASE_CHECKSUM_FILE}"
-            popd > /dev/null
+          mkdir -p upload
+          cp "${RELEASE_SRC_FILE}" upload/
+          find dist -type f -name "*.tar.xz" -exec cp -v {} upload/ \;
+          cd upload
+          for f in *.tar.xz; do
+            sz=$(stat -c%s "${f}")
+            printf "# %s: %s bytes\n" "${f}" "${sz}" >> "${RELEASE_CHECKSUM_FILE}"
+            sha256sum -b "${f}" >> "${RELEASE_CHECKSUM_FILE}"
           done
-          DIST_FILE_LIST="${DIST_FILE_LIST} ${RELEASE_CHECKSUM_FILE}"
-          # remove new lines from file list
-          DIST_FILE_LIST="${DIST_FILE_LIST//$'\n'/ }"
+          cp "${RELEASE_CHECKSUM_FILE}" .
           cat "${RELEASE_CHECKSUM_FILE}"
-          rm -rf -- upload && mkdir -p upload && mv -v ${DIST_FILE_LIST} upload/
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          files: upload/*
+          draft: false
+          prerelease: false
+          files: |
+            upload/*.tar.xz
+            upload/*-checksum.sha256
