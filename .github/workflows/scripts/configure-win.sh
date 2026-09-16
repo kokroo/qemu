@@ -16,7 +16,7 @@ echo DBG
     --enable-pixman \
     --enable-slirp \
     --enable-stack-protector \
-    --disable-tests \
+    --extra-cflags=-Wno-error \
     --prefix=${PWD}/install/qemu \
     --static \
     --target-list=${TARGET} \
