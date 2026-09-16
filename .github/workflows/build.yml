@@ -25,7 +25,6 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             VERSION=${{ github.ref }}
             VERSION=${VERSION#"refs/tags/"}
-            VERSION=${VERSION//"-"/"_"}   # replace dashes with underscores in the version
           else
             VERSION=${{ github.sha }}
             VERSION=g${VERSION:0:8}
