@@ -30,6 +30,7 @@
 #include "chardev/char-fe.h"
 #include "exec/helper-proto.h"
 #include "semihosting/semihost.h"
+#include "semihosting/common-semi.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
 
@@ -434,4 +435,49 @@ void HELPER(simcall)(CPUXtensaState *env)
         regs[3] = TARGET_ENOSYS;
         break;
     }
+}
+
+/*
+ * OpenOCD-style (ARM-compatible) semihosting.
+ *
+ * Trap: `break 1, 14` (the instruction emitted by taiki-e/semihosting's
+ * arm_compat::xtensa backend, OpenOCD's esp_xtensa_semihosting, and
+ * probe-rs). a2 = op (ARM numbering: 0x01 open ... 0x15 get_cmdline,
+ * 0x18 exit, 0x20 exit_extended), a3 = pointer to the parameter block.
+ * Result is returned in a2, like ARM's r0. All op semantics (cmdline
+ * from -semihosting-config arg=, console writes to stdout, process exit
+ * with the guest status) come from the shared arm-compat core.
+ *
+ * `break n,m` is encoded 0x0040nm as a 24-bit little-endian instruction;
+ * `break 1,14` is therefore the word 0x00401e.
+ */
+
+#define XTENSA_SEMIHOST_INSN      0x0041e0u
+#define XTENSA_SEMIHOST_INSN_LEN  3
+
+bool xtensa_semihosting_openocd_trap(CPUXtensaState *env)
+{
+    CPUState *cs = CPU(xtensa_env_get_cpu(env));
+    uint8_t insn[3] = { 0 };
+
+    if (!semihosting_enabled(false)) {
+        return false;   /* deliver to the guest / gdbstub as before */
+    }
+    cpu_memory_rw_debug(cs, env->pc, insn, sizeof(insn), 0);
+    return (insn[0] | (insn[1] << 8) | (insn[2] << 16)) == XTENSA_SEMIHOST_INSN;
+}
+
+void xtensa_semihosting_openocd(CPUXtensaState *env)
+{
+    CPUState *cs = CPU(xtensa_env_get_cpu(env));
+    unsigned level = env->config->debug_level;
+
+    (void)do_common_semihosting(cs);  /* reads a2/a3 via the accessors,
+                                         writes the result back to a2;
+                                         SYS_EXIT never returns */
+    env->pc += XTENSA_SEMIHOST_INSN_LEN;
+    if (level >= 2) {
+        env->sregs[PS] = env->sregs[EPS2 + level - 2];
+    }
+    cs->exception_index = -1;
 }

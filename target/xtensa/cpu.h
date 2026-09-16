@@ -810,4 +810,14 @@ XtensaCPU *xtensa_cpu_create_with_clock(const char *cpu_type,
  * inputs are NaNs, false to pick the second.
  */
 void xtensa_use_first_nan(CPUXtensaState *env, bool use_first);
+static inline XtensaCPU *xtensa_env_get_cpu(CPUXtensaState *env)
+{
+    return container_of(env, XtensaCPU, env);
+}
+
+/* OpenOCD-style semihosting (xtensa-semi.c) */
+struct CPUXtensaState;
+bool xtensa_semihosting_openocd_trap(CPUXtensaState *env);
+void xtensa_semihosting_openocd(CPUXtensaState *env);
+
 #endif

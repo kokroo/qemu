@@ -110,7 +110,24 @@ static void xtensa_cpu_reset_hold(Object *obj, ResetType type)
 #ifndef CONFIG_USER_ONLY
     env->sregs[PS] = xtensa_option_enabled(env->config,
             XTENSA_OPTION_INTERRUPT) ? 0x1f : 0x10;
+    /* Windowed-ABI guests (esp32/lx6 and up) need WOE from their very first
+     * instruction: xtensa-lx-rt's Reset begins with ENTRY, which requires
+     * PS.WOE=1/EXCM=0 to be legal at all (and the CWOE TB flag follows PS).
+     * ROM-based flows (IDF) set PS themselves; a -kernel direct entry has
+     * no ROM, so deliver the state real boot ROMs leave: WOE|UM. */
+    if (xtensa_option_enabled(env->config,
+                              XTENSA_OPTION_WINDOWED_REGISTER)) {
+        env->sregs[PS] = PS_WOE | PS_UM;
+        env->sregs[WINDOW_BASE] = 0;
+        env->sregs[WINDOW_START] = 1;
+        env->windowbase_next = 0;
+    }
     env->pending_irq_level = 0;
+    /* This core config's reset vector entry is 0x50000000, but the esp32
+     * machine installs its boot blob at the architectural reset vector;
+     * the blob itself parks the APP CPU (rsr.prid + waiti). Deliver the
+     * blob address on every reset. */
+    env->pc = 0x40000400;
 #else
     env->sregs[PS] = PS_UM | (3 << PS_RING_SHIFT);
     if (xtensa_option_enabled(env->config,

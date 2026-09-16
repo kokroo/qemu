@@ -1,3 +1,4 @@
 config XTENSA
     bool
-    imply SEMIHOSTING if TCG
+	imply SEMIHOSTING if TCG
+	select ARM_COMPATIBLE_SEMIHOSTING if TCG

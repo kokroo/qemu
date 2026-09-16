@@ -207,6 +207,12 @@ void xtensa_cpu_do_interrupt(CPUState *cs)
 {
     CPUXtensaState *env = cpu_env(cs);
 
+    /* OpenOCD-style semihosting trap: consume it here, never raise it. */
+    if (xtensa_semihosting_openocd_trap(env)) {
+        xtensa_semihosting_openocd(env);
+        return;
+    }
+
     if (cs->exception_index == EXC_IRQ) {
         qemu_log_mask(CPU_LOG_INT,
                       "%s(EXC_IRQ) level = %d, cintlevel = %d, "

@@ -908,16 +908,25 @@ static void esp32s3_machine_init(MachineState *machine)
             uint8_t p[4];
             memcpy(p, &elf_entry, 4);
             uint8_t boot[] = {
-                0x06, 0x01, 0x00,       /* j    1 */
-                0x00,                   /* .literal_position */
-                p[0], p[1], p[2], p[3], /* .literal elf_entry */
-                                        /* 1: */
-                0x01, 0xff, 0xff,       /* l32r a0, elf_entry */
-                0xa0, 0x00, 0x00,       /* jx   a0 */
+                0x06, 0x01, 0x00, 0x00, /* j    8 (.align 4)         */
+                p[0], p[1], p[2], p[3], /* .literal elf_entry        */
+                0x21, 0xff, 0xff,       /* l32r a2, elf_entry        */
+                0xa0, 0x02, 0x00,       /* jx   a2                   */
             };
             // Write boot function to reset-vector address (0x40000400) of the CPU 0
             rom_add_blob_fixed_as("boot", boot, sizeof(boot), XCHAL_RESET_VECTOR_PADDR, CPU(&ss->cpu[0])->as);
             ss->cpu[0].env.pc = XCHAL_RESET_VECTOR_PADDR;
+            ss->cpu[0].env.sregs[PS] = PS_WOE | PS_UM;
+
+            if (machine->smp.cpus > 1) {
+                uint8_t park[] = {
+                    0x00, 0x7f, 0x00,   /* waiti 15                  */
+                    0x46, 0xfe, 0xff,   /* j     0                   */
+                };
+                rom_add_blob_fixed_as("park", park, sizeof(park), XCHAL_RESET_VECTOR_PADDR, CPU(&ss->cpu[1])->as);
+                ss->cpu[1].env.pc = XCHAL_RESET_VECTOR_PADDR;
+                ss->cpu[1].env.sregs[PS] = PS_WOE | PS_UM;
+            }
         }
     } else {
         char *rom_binary = qemu_find_file(QEMU_FILE_TYPE_BIOS, "esp32s3_rev0_rom.bin");
