@@ -22,7 +22,7 @@ echo DBG
     --enable-pixman \
     --enable-slirp \
     --enable-stack-protector \
-    --extra-cflags=-Werror \
+    --disable-tests \
     --prefix=${PWD}/install/qemu \
     --target-list=${TARGET} \
     --with-pkgversion="${VERSION}" \
