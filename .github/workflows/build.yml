@@ -65,16 +65,14 @@ jobs:
         include:
           - platform: x86_64-linux-gnu
             runs_on: ubuntu-22.04
-            # Debian 11 provides the lowest possible Glibc version (2.31), given QEMU's glib2 => 2.66 requirement.
-            container: debian:11.11
+            container: debian:12
             shell: bash -e {0}
             run_prerequisites: "./.github/workflows/scripts/prerequisites-native.sh"
             run_configure: "./.github/workflows/scripts/configure-native.sh"
 
           - platform: aarch64-linux-gnu
             runs_on: ubuntu-22.04
-            # Debian 11 provides the lowest possible Glibc version (2.31), given QEMU's glib2 => 2.66 requirement.
-            container: debian:11.11
+            container: debian:12
             shell: bash -e {0}
             run_prerequisites: "./.github/workflows/scripts/prerequisites-cross-linux-arm64.sh"
             run_configure: "./.github/workflows/scripts/configure-cross-linux-arm64.sh"

@@ -19,9 +19,11 @@ apt-get install -y -q --no-install-recommends \
     libpixman-1-dev:arm64 \
     libsdl2-dev:arm64 \
     libslirp-dev:arm64 \
+    meson \
     ninja-build \
+    python3 \
     python3-pip \
     zlib1g-dev:arm64 \
 && :
 
-/usr/bin/pip3 install meson==1.7.0 tomli==2.2.1
+python3 -m pip install --break-system-packages meson==1.7.0 tomli==2.2.1 || true
