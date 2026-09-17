@@ -47,7 +47,7 @@ jobs:
     env:
       # A simple way to spread several environments for Windows. But to be more precise, we need to somehow add different envs to matrix.include
 
-      MSYSTEM: MINGW64  # Ref: https://www.msys2.org/docs/environments/
+      MSYSTEM: ${{ matrix.msystem || 'MINGW64' }}
       CHERE_INVOKING: 'yes'
       MSYS: 'winsymlinks:native'
     strategy:
@@ -58,6 +58,7 @@ jobs:
           - x86_64-linux-gnu
           - aarch64-linux-gnu
           - x86_64-w64-mingw32
+          - aarch64-w64-mingw32
           - aarch64-apple-darwin
         target: [xtensa-softmmu]
 
@@ -79,6 +80,13 @@ jobs:
           - platform: x86_64-w64-mingw32
             runs_on: windows-2022
             shell: msys2 {0}
+            msystem: MINGW64
+            run_configure: "./.github/workflows/scripts/configure-win.sh"
+
+          - platform: aarch64-w64-mingw32
+            runs_on: windows-11-arm
+            shell: msys2 {0}
+            msystem: CLANGARM64
             run_configure: "./.github/workflows/scripts/configure-win.sh"
 
           - platform: aarch64-apple-darwin
@@ -98,11 +106,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
-        if : ${{ matrix.platform != 'x86_64-w64-mingw32' }}
+        if : ${{ matrix.platform != 'x86_64-w64-mingw32' && matrix.platform != 'aarch64-w64-mingw32' }}
         run: |
           ${{ matrix.run_prerequisites }}
 
-      - name: Install MSYS2 prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
+      - name: Install MSYS2 x86_64 prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
         if : ${{ matrix.platform == 'x86_64-w64-mingw32' }}
         uses: msys2/setup-msys2@v2
         with:
@@ -123,6 +131,27 @@ jobs:
             mingw-w64-x86_64-python
             mingw-w64-x86_64-SDL2
 
+      - name: Install MSYS2 ARM64 prerequisites (${{ matrix.target }} @ ${{ matrix.platform }})
+        if : ${{ matrix.platform == 'aarch64-w64-mingw32' }}
+        uses: msys2/setup-msys2@v2
+        with:
+          cache: true
+          msystem: CLANGARM64
+          install: >-
+            diffutils
+            git
+            mingw-w64-clang-aarch64-cc
+            mingw-w64-clang-aarch64-glib2
+            mingw-w64-clang-aarch64-libgcrypt
+            mingw-w64-clang-aarch64-libiconv
+            mingw-w64-clang-aarch64-libslirp
+            mingw-w64-clang-aarch64-meson
+            mingw-w64-clang-aarch64-ninja
+            mingw-w64-clang-aarch64-pixman
+            mingw-w64-clang-aarch64-pkg-config
+            mingw-w64-clang-aarch64-python
+            mingw-w64-clang-aarch64-SDL2
+
       - name: Configure (${{ matrix.target }} @ ${{ matrix.platform }})
         env:
           VERSION: ${{ needs.Vars.outputs.VERSION }}
@@ -135,7 +164,7 @@ jobs:
           ninja -C build install
 
       - name: Bundle Windows DLLs (${{ matrix.target }} @ ${{ matrix.platform }})
-        if : ${{ matrix.platform == 'x86_64-w64-mingw32' }}
+        if : ${{ matrix.platform == 'x86_64-w64-mingw32' || matrix.platform == 'aarch64-w64-mingw32' }}
         run: |
           ./.github/workflows/scripts/bundle-win-dlls.sh install/qemu/bin
 

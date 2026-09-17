@@ -10,7 +10,7 @@
 set -euo pipefail
 
 INSTALL_BIN_DIR="${1:-install/qemu/bin}"
-MINGW_BIN_DIR="/mingw64/bin"
+MINGW_BIN_DIR="${MINGW_PREFIX:-/mingw64}/bin"
 
 echo "Checking for missing DLLs in ${INSTALL_BIN_DIR}..."
 
